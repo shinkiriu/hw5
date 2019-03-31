@@ -46,3 +46,307 @@
 运算带来的繁琐步骤。对于不规则的噪声值，通过傅里叶变换可以得到很好的平滑效果。
 2.在高通滤波上，由于空域上卷积运算高通滤波的效果更好，往往在边缘提取和锐化上更加优秀，而频域运算容易出现边缘模糊或者非边缘部分出现阴影点的情况。
 3.空域处理在二值化和归一化处理时更加灵活，而频域处理则往往带来许多问题。
+
+
+-------------------------------------------------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------------------------------------------------
+
+***源代码
+需要用到的函数：
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%巴特沃斯滤波器：
+function[image_out]=Bfilter(image_in,D0,N,h)
+%Butterworth滤波器,巴特沃斯滤波器的截止频率为D0，阶数N
+%h为1的时候为高通滤波，0的时候为低通滤波
+[m,n]=size(image_in);
+P=2*m;
+Q=2*n;
+fp = zeros(P, Q);
+%对图像填充0,并且乘以(-1)^(x+y) 以移到变换中心
+for i = 1 : m
+    for j = 1 : n
+        fp(i, j) = double(image_in(i, j)) * (-1)^(i+j);
+    end
+end
+
+F1=fft2(fp);%对图像做傅里叶变换
+
+H=zeros(P,Q);
+%生成巴特沃斯滤波函数，中心在（m,n）
+for u=1:P
+    for v=1:Q
+        temp=((u-m)^2+(v-m)^2)^(1/2);
+        if h==0 
+            H(u,v)=1/(1+(temp/D0)^(2*N));
+        elseif h==1
+            H(u,v)=1/(1+(D0/temp)^(2*N)); 
+        end
+    end
+end
+
+%进行滤波
+G=F1 .*H;
+
+gp = ifft2(G);%傅里叶反变换
+image_out=zeros(m,n);
+%得到结果图像
+for x=1:m
+    for y=1:n
+        image_out(x,y)=real(gp(x,y))*(-1)^(x+y);
+    end
+end
+image_out=uint8(image_out);
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%高斯滤波器：
+function[image_out]=Gfilter(image_in,D0,h)
+%Gaussian滤波器,高斯滤波器的截止频率为D0
+%h为1的时候为高通滤波，0的时候为低通滤波
+[m,n]=size(image_in);
+P=2*m;
+Q=2*n;
+fp = zeros(P, Q);
+%对图像填充0,并且乘以(-1)^(x+y) 以移到变换中心
+for i = 1 : m
+    for j = 1 : n
+        fp(i, j) = double(image_in(i, j)) * (-1)^(i+j);
+    end
+end
+
+F1=fft2(fp);%对图像做傅里叶变换
+
+H=zeros(P,Q);
+%生成高斯滤波函数，中心在（m,n）
+for u=1:P
+    for v=1:Q
+        temp=(u-m)^2+(v-m)^2;%得到D(u,v)^2
+        if h==0 %高斯低通滤波器
+            H(u,v)=exp(-temp/(2*D0^2));
+        elseif h==1%高斯高通滤波器
+            H(u,v)=1-exp(-temp/(2*D0^2)); 
+        end
+    end
+end
+
+%进行滤波
+G=F1 .*H;
+
+gp = ifft2(G);%傅里叶反变换
+image_out=zeros(m,n);
+%得到结果图像
+for x=1:m
+    for y=1:n
+        image_out(x,y)=uint8(real(gp(x,y))*(-1)^(x+y));
+    end
+end
+image_out=uint8(image_out);
+
+        
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%拉普拉斯滤波器：
+function[image_out]=Lfilter(image_in)
+%拉普拉斯滤波器,高斯滤波器的截止频率为D0
+%h为1的时候为高通滤波，0的时候为低通滤波
+[m,n]=size(image_in);
+P=2*m;
+Q=2*n;
+fp = zeros(P, Q);
+%对图像填充0,并且乘以(-1)^(x+y) 以移到变换中心
+
+for i = 1 : m
+    for j = 1 : n
+        fp(i, j) = double(image_in(i, j)) * (-1)^(i+j);%将中心移动
+    end
+end
+
+F1=fft2(fp);%对图像做傅里叶变换
+
+H=zeros(P,Q);
+%生成拉普拉斯滤波函数，中心在（m,n）
+for u=1:P
+    for v=1:Q
+           temp=(u-m)^2+(v-m)^2;%得到D(u,v)^2
+            H(u,v)=4*(pi^2)*temp+1; %得到滤波函数
+    end
+end
+
+%进行滤波
+G=F1.*H;
+gp = ifft2(G);%傅里叶反变换
+
+%得到结果图像
+for x=1:m
+    for y=1:n
+        g(x,y)=real(gp(x,y))*(-1)^(x+y);
+    end
+end
+mmax = max(g(:));
+mmin = min(g(:));
+range = mmax-mmin;
+
+image_out=zeros(m,n);
+for i = 1 : m
+    for j = 1 : n
+        image_out(i,j) = 255 * (g(i, j)-mmin) / range;
+    end
+end
+image_out=uint8(image_out);
+
+    
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Unmask滤波器：
+function[image_out]=Ufilter(image_in,D0)
+%拉普拉斯滤波器,高斯滤波器的截止频率为D0
+%h为1的时候为高通滤波，0的时候为低通滤波
+[m,n]=size(image_in);
+P=2*m;
+Q=2*n;
+fp = zeros(P, Q);
+%对图像填充0,并且乘以(-1)^(x+y) 以移到变换中心
+
+%将中心移动
+for i = 1 : m
+    for j = 1 : n
+        fp(i, j) = double(image_in(i, j)) * (-1)^(i+j);
+    end
+end
+
+F1=fft2(fp);%对图像做傅里叶变换
+
+H=zeros(P,Q);
+%生成unmask高通滤波函数，中心在（m,n）
+for u=1:P
+    for v=1:Q
+           temp=(u-m)^2+(v-m)^2;%得到D(u,v)^2
+           if(temp<D0^2)
+               H(u,v)=0; 
+           else
+               H(u,v)=1;
+           end         
+    end
+end
+%进行滤波
+G=F1.*H;
+gp = ifft2(G);%傅里叶反变换
+%得到结果图像
+for x=1:m
+    for y=1:n
+        g(x,y)=real(gp(x,y))*(-1)^(x+y);
+    end
+end
+mmax = max(g(:));
+mmin = min(g(:));
+range = mmax-mmin;
+
+%255灰度值标准化处理
+image_out=zeros(m,n);
+for i = 1 : m
+    for j = 1 : n
+        image_out(i,j) = 255 * (g(i, j)-mmin) / range;
+    end
+end
+image_out=uint8(image_out);
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%第一题:
+clear all;
+close all;
+clc;
+D0=250;  %截止频率
+h=0;   %低通
+image_1=imread('test1.pgm');
+image_2=imread('test2.tif');
+
+image_1B=Bfilter(image_1,D0,2,h);
+image_1G=Gfilter(image_1,D0,h);
+image_2B=Bfilter(image_2,D0,2,h);
+image_2G=Gfilter(image_2,D0,h);
+figure
+subplot(2,3,1)
+imshow(image_1)
+title('test1原图')
+subplot(2,3,2)
+imshow(image_1B)
+title('test1巴特沃斯低通滤波')
+subplot(2,3,3)
+imshow(image_1G)
+title('test1高斯低通滤波')
+subplot(2,3,4)
+imshow(image_2)
+title('test2原图')
+subplot(2,3,5)
+imshow(image_2B)
+title('test2巴特沃斯低通滤波')
+subplot(2,3,6)
+imshow(image_2G)
+title('test2高斯低通滤波')
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%第二题：
+clear all;
+close all;
+clc;
+D0=18;   %截止频率
+N=2;     %阶数
+h=1;     %高通
+image_1=imread('test3.pgm');
+image_2=imread('test4.bmp');
+
+image_1B=Bfilter(image_1,D0,N,h);
+image_1G=Gfilter(image_1,D0,h);
+image_2B=Bfilter(image_2,D0,N,h);
+image_2G=Gfilter(image_2,D0,h);
+figure
+subplot(2,3,1)
+imshow(image_1)
+title('test1原图')
+subplot(2,3,2)
+imshow(image_1B)
+title('test1巴特沃斯高通滤波')
+subplot(2,3,3)
+imshow(image_1G)
+title('test1高斯高通滤波')
+subplot(2,3,4)
+imshow(image_2)
+title('test2原图')
+subplot(2,3,5)
+imshow(image_2B)
+title('test2巴特沃斯高通滤波')
+subplot(2,3,6)
+imshow(image_2G)
+title('test2高斯高通滤波')
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%第三题：
+clear all;
+close all;
+clc;
+D0=80;%截止频率
+
+image_1=imread('test3.pgm');
+image_2=imread('test4.bmp');
+
+image_1L=Lfilter(image_1);
+image_1U=Ufilter(image_1,D0);
+
+image_2L=Lfilter(image_2);
+image_2U=Ufilter(image_2,D0);
+
+figure
+subplot(2,3,1)
+imshow(image_1);
+title('test3原图')
+subplot(2,3,2)
+imshow(image_1L);
+title('test3高通拉普拉斯变换')
+subplot(2,3,3)
+imshow(image_1U);
+title('test3的高通unmask变换')
+subplot(2,3,4)
+imshow(image_2);
+title('test4原图')
+subplot(2,3,5)
+imshow(image_2L);
+title('test4高通拉普拉斯变换')
+subplot(2,3,6)
+imshow(image_2U);
+title('test4的高通unmask变换')
+
+
